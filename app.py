@@ -2,13 +2,12 @@ import streamlit as st
 import cv2
 import numpy as np
 from PIL import Image
-import torch
 
-st.set_page_config(title="AI Studio", layout="centered")
+st.set_page_config(page_title="AI Studio", layout="wide")
 st.title("🎨 AI Photo Stylizer – Free Edition")
 
 # Upload
-file = st.file_uploader("📸 Upload your photo", type=["png","jpg","jpeg"])
+file = st.file_uploader("📸 Upload your photo", type=["png", "jpg", "jpeg"])
 style = st.selectbox("Choose AI Style", [
     "Ghibli Anime",
     "Cartoon Style",
@@ -20,7 +19,7 @@ style = st.selectbox("Choose AI Style", [
 quality = st.checkbox("✨ Enhance Quality (2X Upscale)")
 
 def enhance(image):
-    return cv2.resize(image, None, fx=2, fy=2)
+    return cv2.resize(image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
 
 def pencil(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -31,10 +30,10 @@ def pencil(img):
 
 def cartoon(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.medianBlur(gray, 7)
+    blur = cv2.medianBlur(gray, 5)
     edges = cv2.adaptiveThreshold(blur,255,
               cv2.ADAPTIVE_THRESH_MEAN_C,
-              cv2.THRESH_BINARY,9,2)
+              cv2.THRESH_BINARY,9,3)
     color = cv2.bilateralFilter(img,9,300,300)
     return cv2.bitwise_and(color, color, mask=edges)
 
@@ -48,7 +47,7 @@ process = None
 
 if file:
     image = np.array(Image.open(file).convert("RGB"))
-    show = image.copy()
+    show = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
     if st.button("✨ Transform Now"):
         with st.spinner("AI Processing... ⏳"):
@@ -65,18 +64,17 @@ if file:
                 process = smooth(show)
 
             elif style == "Ghibli Anime":
-                process = cartoon(show)
+                process = cartoon(show)  # placeholder - upgrade soon ✅
 
         if quality:
             process = enhance(process)
 
-        st.image(process, caption="AI Output", channels="RGB")
+        result_rgb = cv2.cvtColor(process, cv2.COLOR_BGR2RGB)
+        st.image(result_rgb, caption="✅ Transformed Output", channels="RGB")
 
-        # Prepare download
-        result = Image.fromarray(process)
         st.download_button(
             "⬇ Download Result",
-            data=cv2.imencode(".png", process)[1].tobytes(),
+            data=cv2.imencode(".png", result_rgb)[1].tobytes(),
             file_name="ai_result.png",
             mime="image/png"
         )
