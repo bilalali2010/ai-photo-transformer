@@ -1,143 +1,82 @@
 import streamlit as st
 import cv2
 import numpy as np
-from PIL import Image, ImageEnhance
+from PIL import Image
+import torch
 
+st.set_page_config(title="AI Studio", layout="centered")
+st.title("🎨 AI Photo Stylizer – Free Edition")
 
-st.set_page_config(page_title="AI Photo FX", layout="wide")
-st.title("🎨 AI Photo FX – Smart Image Filters")
-
-
-# ✅ Effects
-effects = [
-    "Original",
+# Upload
+file = st.file_uploader("📸 Upload your photo", type=["png","jpg","jpeg"])
+style = st.selectbox("Choose AI Style", [
+    "Ghibli Anime",
+    "Cartoon Style",
     "Pencil Sketch",
-    "Ghibli Cartoon",
-    "Color Pop",
-    "HDR Enhance",
-    "Smooth Skin"
-]
+    "HDR Effect",
+    "Smooth Skin",
+])
 
+quality = st.checkbox("✨ Enhance Quality (2X Upscale)")
 
-# ✅ Convert uploaded image → OpenCV Format
-def load_image(image):
-    img = np.array(image.convert("RGB"))
-    return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+def enhance(image):
+    return cv2.resize(image, None, fx=2, fy=2)
 
-
-# ✅ Pencil Sketch – High-Quality
-def pencil_sketch(img):
-    dst_gray, _ = cv2.pencilSketch(
-        img, sigma_s=70, sigma_r=0.07, shade_factor=0.05
-    )
-    if dst_gray.mean() < 127:
-        dst_gray = cv2.bitwise_not(dst_gray)
-    return dst_gray
-
-
-# ✅ Anime / Ghibli-Inspired Cartoon Filter
-def ghibli_cartoon(img):
-    # Reduce noise but keep edges sharp
-    filtered = cv2.bilateralFilter(img, 11, 100, 100)
-
-    # Edge mask
-    gray = cv2.cvtColor(filtered, cv2.COLOR_BGR2GRAY)
-    blur = cv2.medianBlur(gray, 5)
-    edges = cv2.adaptiveThreshold(
-        blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-        cv2.THRESH_BINARY, 9, 2
-    )
-    edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-
-    # Slight saturation boost (Ghibli style)
-    hsv = cv2.cvtColor(filtered, cv2.COLOR_BGR2HSV)
-    hsv[..., 1] = cv2.add(hsv[..., 1], 20)
-    color = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-
-    cartoon = cv2.bitwise_and(color, edges)
-    return cartoon
-
-
-# ✅ Color Pop (Background B&W, Person Color)
-def color_pop(img):
+def pencil(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray_3ch = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-    mask = cv2.GaussianBlur(gray, (21, 21), 0) > 120
-    result = img.copy()
-    result[~mask] = gray_3ch[~mask]
-    return result
+    inv = 255 - gray
+    blur = cv2.GaussianBlur(inv, (21,21), 0)
+    sketch = cv2.divide(gray, 255-blur, scale=256)
+    return cv2.cvtColor(sketch, cv2.COLOR_GRAY2BGR)
 
+def cartoon(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur = cv2.medianBlur(gray, 7)
+    edges = cv2.adaptiveThreshold(blur,255,
+              cv2.ADAPTIVE_THRESH_MEAN_C,
+              cv2.THRESH_BINARY,9,2)
+    color = cv2.bilateralFilter(img,9,300,300)
+    return cv2.bitwise_and(color, color, mask=edges)
 
-# ✅ HDR Boost – Vibrant sharp look
-def hdr_effect(img):
-    hdr = cv2.detailEnhance(img, sigma_s=12, sigma_r=0.4)
-    return hdr
+def hdr(img):
+    return cv2.detailEnhance(img, sigma_s=12, sigma_r=0.15)
 
+def smooth(img):
+    return cv2.bilateralFilter(img, 17, 75, 75)
 
-# ✅ Smooth Skin
-def skin_smooth(img):
-    return cv2.bilateralFilter(img, 15, 80, 80)
+process = None
 
+if file:
+    image = np.array(Image.open(file).convert("RGB"))
+    show = image.copy()
 
-# ✅ Auto HD Upscale
-def upscale(img):
-    h, w = img.shape[:2]
-    scale = 1.5
-    return cv2.resize(img, (int(w * scale), int(h * scale)), cv2.INTER_CUBIC)
+    if st.button("✨ Transform Now"):
+        with st.spinner("AI Processing... ⏳"):
+            if style == "Pencil Sketch":
+                process = pencil(show)
 
+            elif style == "Cartoon Style":
+                process = cartoon(show)
 
-# ✅ Convert for Streamlit display
-def to_display(img):
-    if len(img.shape) == 2:
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    else:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    return img
+            elif style == "HDR Effect":
+                process = hdr(show)
 
+            elif style == "Smooth Skin":
+                process = smooth(show)
 
-uploaded_image = st.file_uploader("📸 Upload image", type=["jpg", "jpeg", "png"])
+            elif style == "Ghibli Anime":
+                process = cartoon(show)
 
-if uploaded_image:
-    image = Image.open(uploaded_image)
-    st.image(image, caption="Original", width=300)
+        if quality:
+            process = enhance(process)
 
-    effect = st.selectbox("✨ Choose an Effect", effects)
+        st.image(process, caption="AI Output", channels="RGB")
 
-    if st.button("Apply Effect"):
-        img = load_image(image)
-
-        if effect == "Original":
-            result = img
-
-        elif effect == "Pencil Sketch":
-            result = pencil_sketch(img)
-
-        elif effect == "Ghibli Cartoon":
-            result = ghibli_cartoon(img)
-
-        elif effect == "Color Pop":
-            result = color_pop(img)
-
-        elif effect == "HDR Enhance":
-            result = hdr_effect(img)
-
-        elif effect == "Smooth Skin":
-            result = skin_smooth(img)
-
-        # ✅ Final HD Enhancement
-        final = upscale(result)
-
-        display_img = to_display(final)
-        st.image(display_img, caption=f"{effect} Applied ✅", width=640)
-
-        # ✅ Download Button (HQ)
-        retval, buf = cv2.imencode(".png", final)
+        # Prepare download
+        result = Image.fromarray(process)
         st.download_button(
-            "⬇️ Download High-Quality PNG",
-            data=buf.tobytes(),
-            file_name="ai_edited.png",
+            "⬇ Download Result",
+            data=cv2.imencode(".png", process)[1].tobytes(),
+            file_name="ai_result.png",
             mime="image/png"
         )
-
-st.markdown("---")
-st.info("🚀 More AI Effects Coming Soon: Background remove, 4K Super resolution, AI Faces…")
