@@ -1,48 +1,48 @@
 import streamlit as st
-from PIL import Image
-import torch
-from diffusers import StableDiffusionImg2ImgPipeline
+from PIL import Image, ImageEnhance
+import cv2
+import numpy as np
+from gfpgan import GFPGANer
 
-st.title("AI Photo Transformer 🔮")
-st.write("Upload your image and choose a style!")
+st.title("AI Photo Enhancer & Face Beautifier ✨")
 
-# Load model
 @st.cache_resource
 def load_model():
-    pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
-        "runwayml/stable-diffusion-v1-5",
-        torch_dtype=torch.float32
+    return GFPGANer(
+        model_path="https://github.com/TencentARC/GFPGAN/releases/download/v1.3.8/GFPGANv1.4.pth",
+        upscale=2
     )
-    pipe = pipe.to("cpu")  # free hosting uses CPU
-    return pipe
 
-pipe = load_model()
+gfpgan = load_model()
 
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-
-styles = {
-    "Cartoon": "make this face look like a cartoon character",
-    "Anime": "turn this person into anime style with big eyes and smooth skin",
-    "Professional Headshot": "make this look like a high-quality professional portrait photo",
-    "Old Age": "make this person look 60 years old",
-    "Baby Face": "make this person look young like a child"
-}
-
-style_choice = st.selectbox("Choose a transformation", list(styles.keys()))
-
-strength = st.slider("Transformation Strength", 0.1, 1.0, 0.7)
+uploaded_file = st.file_uploader("Upload a face photo", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Original Image", width=300)
+    img_np = np.array(image)
 
-    if st.button("Transform"):
-        with st.spinner("Generating... This may take 30–50 seconds."):
-            prompt = styles[style_choice]
-            result = pipe(prompt=prompt, image=image, strength=strength, guidance_scale=7.5)
-            output = result.images[0]
-            st.image(output, caption="Transformed", width=300)
+    st.image(image, caption="Original", width=300)
 
-            output.save("output.png")
-            with open("output.png", "rb") as f:
-                st.download_button("Download Image", f, "transformed.png")
+    if st.button("Enhance Face"):
+        with st.spinner("Improving face quality..."):
+            _, _, enhanced_face = gfpgan.enhance(img_np, has_aligned=False)
+            enhanced_img = Image.fromarray(enhanced_face)
+            st.image(enhanced_img, caption="Enhanced Image", width=300)
+
+            enhanced_img.save("enhanced.png")
+            with open("enhanced.png", "rb") as f:
+                st.download_button("Download Result", f, "enhanced.png")
+
+    brightness = st.slider("Brightness", 0.5, 2.0, 1.0)
+    contrast = st.slider("Contrast", 0.5, 2.0, 1.0)
+
+    if st.button("Apply Filters"):
+        enhancer_b = ImageEnhance.Brightness(image)
+        enhancer_c = ImageEnhance.Contrast(enhancer_b.enhance(brightness))
+        filtered = enhancer_c.enhance(contrast)
+
+        st.image(filtered, caption="Filtered Image", width=300)
+
+        filtered.save("filtered.png")
+        with open("filtered.png", "rb") as f:
+            st.download_button("Download Filtered", f, "filtered.png")
