@@ -1,5 +1,6 @@
 streamlit
 pillow
 torch
-diffusers
-transformers
+gfpgan
+basicsr
+opencv-python-headless
