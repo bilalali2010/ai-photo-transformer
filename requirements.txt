@@ -1,6 +1,4 @@
 streamlit
 pillow
-torch
-gfpgan
-basicsr
 opencv-python-headless
+numpy
