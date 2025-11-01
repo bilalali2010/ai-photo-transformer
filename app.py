@@ -2,47 +2,64 @@ import streamlit as st
 from PIL import Image, ImageEnhance
 import cv2
 import numpy as np
-from gfpgan import GFPGANer
 
-st.title("AI Photo Enhancer & Face Beautifier ✨")
+st.title("AI Photo Filters & Face Enhancer ✨")
+st.write("Upload your photo to apply cool AI filters!")
 
-@st.cache_resource
-def load_model():
-    return GFPGANer(
-        model_path="https://github.com/TencentARC/GFPGAN/releases/download/v1.3.8/GFPGANv1.4.pth",
-        upscale=2
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+
+# Face detector
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+)
+
+def smooth_skin(img):
+    return cv2.bilateralFilter(img, 15, 75, 75)
+
+def cartoon(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.adaptiveThreshold(
+        cv2.medianBlur(gray, 5),
+        255,
+        cv2.ADAPTIVE_THRESH_MEAN_C,
+        cv2.THRESH_BINARY,
+        9,
+        9
     )
-
-gfpgan = load_model()
-
-uploaded_file = st.file_uploader("Upload a face photo", type=["jpg", "jpeg", "png"])
+    color = cv2.bilateralFilter(img, 10, 250, 250)
+    return cv2.bitwise_and(color, color, mask=edges)
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-    img_np = np.array(image)
-
+    np_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     st.image(image, caption="Original", width=300)
-
-    if st.button("Enhance Face"):
-        with st.spinner("Improving face quality..."):
-            _, _, enhanced_face = gfpgan.enhance(img_np, has_aligned=False)
-            enhanced_img = Image.fromarray(enhanced_face)
-            st.image(enhanced_img, caption="Enhanced Image", width=300)
-
-            enhanced_img.save("enhanced.png")
-            with open("enhanced.png", "rb") as f:
-                st.download_button("Download Result", f, "enhanced.png")
 
     brightness = st.slider("Brightness", 0.5, 2.0, 1.0)
     contrast = st.slider("Contrast", 0.5, 2.0, 1.0)
 
-    if st.button("Apply Filters"):
-        enhancer_b = ImageEnhance.Brightness(image)
-        enhancer_c = ImageEnhance.Contrast(enhancer_b.enhance(brightness))
-        filtered = enhancer_c.enhance(contrast)
+    if st.button("Enhance Face"):
+        gray = cv2.cvtColor(np_img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-        st.image(filtered, caption="Filtered Image", width=300)
+        for (x, y, w, h) in faces:
+            roi = np_img[y:y+h, x:x+w]
+            np_img[y:y+h, x:x+w] = smooth_skin(roi)
 
-        filtered.save("filtered.png")
-        with open("filtered.png", "rb") as f:
-            st.download_button("Download Filtered", f, "filtered.png")
+        result = cv2.cvtColor(np_img, cv2.COLOR_BGR2RGB)
+        st.image(result, caption="Smooth Skin Result", width=300)
+
+    if st.button("Cartoon Filter"):
+        cartoon_img = cartoon(np_img)
+        result = cv2.cvtColor(cartoon_img, cv2.COLOR_BGR2RGB)
+        st.image(result, caption="Cartoon Effect", width=300)
+
+    # Brightness & contrast
+    enhancer_b = ImageEnhance.Brightness(image)
+    enhancer_c = ImageEnhance.Contrast(enhancer_b.enhance(brightness))
+    filtered = enhancer_c.enhance(contrast)
+
+    st.image(filtered, caption="Brightness/Contrast Applied", width=300)
+
+    filtered.save("edited.png")
+    with open("edited.png", "rb") as f:
+        st.download_button("Download Edited Image", f, "edited.png")
